@@ -1,0 +1,49 @@
+defaults:
+  - ppo_trainer  # 继承基础配置
+  - _self_
+
+# 小模型配置
+actor_rollout_ref:
+  model:
+    path: /mnt/petrelfs/renyiming/model/qwen-weight/Qwen3-0.6B/Qwen3-0.6B  # 小模型路径
+  
+  actor:
+    strategy: fsdp
+  
+  rollout:
+    n: 1  # 每次只生成1个，重复由脚本控制
+    temperature: 1.2
+    log_prob_micro_batch_size: 16
+    max_new_tokens: 512  # 新增：限制最大生成长度
+
+# 小模型采样专用配置
+small_model_rollout:
+  output_dir: ./rollout_output
+  num_samples_per_prompt: 8  # 每个prompt总共采样50次
+  samples_per_generation: 8   # 每次只生成4个样本（关键！）
+  micro_batch_size: 1         # 每次只处理1个prompt（关键！）
+  temperature: 0.7
+  top_p: 0.95
+  top_k: 50
+  max_new_tokens: 4096
+  prompt_prefix: "请一步步思考："  # 自定义前缀
+  only_save_correct: false
+
+data:
+  train_files: /mnt/petrelfs/renyiming/verl/data/train.parquet
+  train_batch_size: 1  # 被micro_batch_size覆盖
+  dataloader_num_workers: 4
+# Trainer配置
+trainer:
+  nnodes: 1
+  n_gpus_per_node: 8
+  device: cuda
+
+# Reward配置
+reward_model:
+  enable: false  # 使用rule-based reward
+
+# Ray配置
+ray_kwargs:
+  ray_init:
+    num_cpus: 32

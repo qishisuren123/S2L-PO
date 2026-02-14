@@ -1,0 +1,360 @@
+ (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
+diff --git a/verl/utils/dataset/offline_rollout_dataset.py b/verl/utils/dataset/offline_rollout_dataset.py
+index 9f7c773dbebcd0faeb7805a6098ed051b201a1a7..f8004ebb37e7e90a32a1eb65b88a6c11ebe70b6e 100644
+--- a/verl/utils/dataset/offline_rollout_dataset.py
++++ b/verl/utils/dataset/offline_rollout_dataset.py
+@@ -1,67 +1,69 @@
+ # Copyright 2024 Bytedance Ltd. and/or its affiliates
+ #
+ # 离线Rollout数据集：加载小模型预先生成的rollout数据
+ # 完全符合verl训练流程的数据格式
+ 
+ import json
+ import os
+ from collections import defaultdict
+ 
+ import numpy as np
+ import torch
+ from torch.utils.data import Dataset
+ from transformers import PreTrainedTokenizer
+ 
+-import verl.utils.torch_functional as verl_F
+ from verl.utils.model import compute_position_id_with_mask
+ 
+ 
+ class OfflineRolloutDataset(Dataset):
+     """
+     离线Rollout数据集：加载小模型采样的数据用于大模型GRPO训练
+     
+     关键：返回的数据格式必须与RLHFDataset一致，确保可以直接用于训练
+     """
+     
+     def __init__(
+         self,
+         data_files: str | list[str],
+         tokenizer: PreTrainedTokenizer,
+         processor,  # 占位，保持接口一致
+         config,
+         max_samples: int = -1,
+     ):
+         self.tokenizer = tokenizer
++        if tokenizer.pad_token_id is None:
++            raise ValueError("Tokenizer must define pad_token_id for offline rollout training")
+         self.config = config
+         self.max_samples = max_samples
+-        
++
+         # 配置参数
+         self.max_prompt_length = config.get("max_prompt_length", 1024)
+         self.max_response_length = config.get("max_response_length", 2048)
+         self.truncation = config.get("truncation", "error")
+         self.samples_per_prompt = config.get("offline_samples_per_prompt", None)
++        self.pad_token_id = tokenizer.pad_token_id
+         
+         # 加载数据
+         if not isinstance(data_files, list):
+             data_files = [data_files]
+         
+         # 按prompt_id分组存储
+         self.grouped_data = defaultdict(list)
+         
+         print(f"Loading offline rollout data from {len(data_files)} files...")
+         
+         total_samples = 0
+         for file_path in data_files:
+             if not os.path.exists(file_path):
+                 raise FileNotFoundError(f"Offline rollout file not found: {file_path}")
+             
+             with open(file_path, 'r', encoding='utf-8') as f:
+                 for line in f:
+                     if line.strip():
+                         item = json.loads(line)
+                         prompt_id = item.get("prompt_id", None)
+                         if prompt_id is None:
+                             prompt_id = str(hash(item["prompt"]))
+                             item["prompt_id"] = prompt_id
+                         
+                         self.grouped_data[prompt_id].append(item)
+@@ -74,200 +76,207 @@ class OfflineRolloutDataset(Dataset):
+         # 检查并调整每个prompt的样本数
+         samples_per_prompt_counts = [len(samples) for samples in self.grouped_data.values()]
+         print(f"Samples per prompt: min={min(samples_per_prompt_counts)}, "
+               f"max={max(samples_per_prompt_counts)}, "
+               f"mean={np.mean(samples_per_prompt_counts):.1f}")
+         
+         if self.samples_per_prompt is not None:
+             print(f"Adjusting to {self.samples_per_prompt} samples per prompt...")
+             for prompt_id in self.prompt_ids_list:
+                 samples = self.grouped_data[prompt_id]
+                 current_n = len(samples)
+                 
+                 if current_n > self.samples_per_prompt:
+                     import random
+                     random.seed(config.get("seed", 42))
+                     self.grouped_data[prompt_id] = random.sample(samples, self.samples_per_prompt)
+                 elif current_n < self.samples_per_prompt:
+                     import random
+                     random.seed(config.get("seed", 42))
+                     additional = random.choices(samples, k=self.samples_per_prompt - current_n)
+                     self.grouped_data[prompt_id] = samples + additional
+         
+         # 统计信息
+         total_samples_after = sum(len(samples) for samples in self.grouped_data.values())
+         correct_samples = sum(
+-            1 for samples in self.grouped_data.values() 
+-            for item in samples if item.get("is_correct", False)
++            1
++            for samples in self.grouped_data.values()
++            for item in samples
++            if item.get("is_correct", False)
+         )
+-        
+-        print(f"Final dataset statistics:")
++
++        print("Final dataset statistics:")
+         print(f"  - Total prompts: {len(self.prompt_ids_list)}")
+         print(f"  - Total samples: {total_samples_after}")
+         print(f"  - Correct samples: {correct_samples}")
+-        print(f"  - Accuracy: {correct_samples / total_samples_after:.2%}")
++        if total_samples_after > 0:
++            print(f"  - Accuracy: {correct_samples / total_samples_after:.2%}")
++        else:
++            print("  - Accuracy: N/A (no samples)")
+         
+         if max_samples > 0 and len(self.prompt_ids_list) > max_samples:
+             import random
+             random.seed(config.get("seed", 42))
+             self.prompt_ids_list = random.sample(self.prompt_ids_list, max_samples)
+             print(f"Randomly sampled {max_samples} prompts")
+     
+     def __len__(self):
+         """返回prompt的数量（不是样本数量）"""
+         return len(self.prompt_ids_list)
+     
+     def __getitem__(self, idx):
+         """
+         返回一个prompt的所有samples
+         
+         关键：返回格式必须是字典列表，每个字典与RLHFDataset的返回格式一致
+         """
+         prompt_id = self.prompt_ids_list[idx]
+         samples = self.grouped_data[prompt_id]
+         
+         # 处理每个sample，返回与RLHFDataset一致的格式
+         processed_samples = []
+         for item in samples:
+             try:
+                 processed_sample = self._process_single_sample(item, prompt_id)
+                 processed_samples.append(processed_sample)
+             except Exception as e:
+                 print(f"Error processing sample for {prompt_id}: {e}")
+                 import traceback
+                 traceback.print_exc()
+                 continue
+         
+         # 返回samples列表
+         return processed_samples
+     
+     def _process_single_sample(self, item, prompt_id):
+         """
+         处理单个sample，返回与RLHFDataset.__getitem__相同格式的字典
+         """
+-        # 1. 处理prompt
+-        prompt_ids = item["prompt_ids"]
+-        prompt_ids = torch.tensor(prompt_ids, dtype=torch.long)
+-        
+-        original_prompt_length = len(prompt_ids)
+-        
+-        # Left padding for prompt
+-        prompt_length = len(prompt_ids)
++        prompt_ids = torch.tensor(item["prompt_ids"], dtype=torch.long)
++        prompt_length = prompt_ids.size(0)
++
++        if prompt_length > self.max_prompt_length:
++            if self.truncation == "left":
++                prompt_ids = prompt_ids[-self.max_prompt_length :]
++            elif self.truncation == "right":
++                prompt_ids = prompt_ids[: self.max_prompt_length]
++            elif self.truncation == "middle":
++                left_half = self.max_prompt_length // 2
++                right_half = self.max_prompt_length - left_half
++                prompt_ids = torch.cat((prompt_ids[:left_half], prompt_ids[-right_half:]), dim=0)
++            elif self.truncation == "error":
++                raise ValueError(f"Prompt length {prompt_length} exceeds max {self.max_prompt_length}")
++            else:
++                raise ValueError(f"Unsupported truncation mode: {self.truncation}")
++        prompt_length = prompt_ids.size(0)
++
+         if prompt_length < self.max_prompt_length:
+             pad_length = self.max_prompt_length - prompt_length
+-            prompt_ids = torch.cat([
+-                torch.full((pad_length,), self.tokenizer.pad_token_id, dtype=torch.long),
+-                prompt_ids
+-            ])
+-            prompt_attention_mask = torch.cat([
+-                torch.zeros(pad_length, dtype=torch.long),
+-                torch.ones(prompt_length, dtype=torch.long)
+-            ])
++            pad_tensor = torch.full((pad_length,), self.pad_token_id, dtype=torch.long)
++            prompt_ids = torch.cat((pad_tensor, prompt_ids), dim=0)
++            prompt_attention_mask = torch.cat(
++                (
++                    torch.zeros(pad_length, dtype=torch.long),
++                    torch.ones(prompt_length, dtype=torch.long),
++                ),
++                dim=0,
++            )
+         else:
+-            if prompt_length > self.max_prompt_length:
+-                if self.truncation == "left":
+-                    prompt_ids = prompt_ids[-self.max_prompt_length:]
+-                    prompt_length = self.max_prompt_length
+-                elif self.truncation == "error":
+-                    raise ValueError(f"Prompt length {prompt_length} exceeds max {self.max_prompt_length}")
+-            prompt_attention_mask = torch.ones_like(prompt_ids)
+-        
+-        # Position IDs
++            prompt_attention_mask = torch.ones(prompt_length, dtype=torch.long)
++
+         position_ids = compute_position_id_with_mask(prompt_attention_mask.unsqueeze(0))[0]
+-        
+-        # 2. 处理response（预生成的）
+-        response_ids = item["response_ids"]
+-        response_ids = torch.tensor(response_ids, dtype=torch.long)
+-        
+-        original_response_length = len(response_ids)
+-        
+-        # 截断response（如果太长）
+-        if len(response_ids) > self.max_response_length:
+-            response_ids = response_ids[:self.max_response_length]
+-        
+-        # 3. 处理log_probs（小模型的）
+-        small_model_log_probs = item["small_model_log_probs"]
+-        
+-        # 确保长度匹配response_ids
+-        actual_response_length = len(response_ids)
+-        if len(small_model_log_probs) > actual_response_length:
+-            small_model_log_probs = small_model_log_probs[:actual_response_length]
+-        elif len(small_model_log_probs) < actual_response_length:
+-            # 填充0（不应该发生，但做保护）
+-            print(f"Warning: log_probs length {len(small_model_log_probs)} < response length {actual_response_length}")
+-            small_model_log_probs = small_model_log_probs + [0.0] * (actual_response_length - len(small_model_log_probs))
+-        
+-        small_model_log_probs = torch.tensor(small_model_log_probs, dtype=torch.float32)
+-        
+-        # 4. 构造返回字典
++
++        response_ids = torch.tensor(item["response_ids"], dtype=torch.long)
++        actual_response_length = min(response_ids.size(0), self.max_response_length)
++        response_ids = response_ids[:actual_response_length]
++
++        if actual_response_length < self.max_response_length:
++            pad_length = self.max_response_length - actual_response_length
++            pad_tensor = torch.full((pad_length,), self.pad_token_id, dtype=torch.long)
++            response_ids = torch.cat((response_ids, pad_tensor), dim=0)
++
++        rollout_log_probs = torch.tensor(item["small_model_log_probs"], dtype=torch.float32)
++        rollout_log_probs = rollout_log_probs[:actual_response_length]
++        if rollout_log_probs.numel() < actual_response_length:
++            pad_length = actual_response_length - rollout_log_probs.numel()
++            rollout_log_probs = torch.cat(
++                (rollout_log_probs, torch.zeros(pad_length, dtype=torch.float32)), dim=0
++            )
++        if rollout_log_probs.numel() < self.max_response_length:
++            pad_length = self.max_response_length - rollout_log_probs.numel()
++            rollout_log_probs = torch.cat(
++                (rollout_log_probs, torch.zeros(pad_length, dtype=torch.float32)), dim=0
++            )
++
++        response_mask = torch.zeros(self.max_response_length, dtype=torch.long)
++        if actual_response_length > 0:
++            response_mask[:actual_response_length] = 1
++
++        reward_value = float(item.get("reward", 0.0))
++        token_level_scores = torch.zeros(self.max_response_length, dtype=torch.float32)
++        if actual_response_length > 0:
++            token_level_scores[actual_response_length - 1] = reward_value
++
+         result = {
+-            # 标准字段
+             "input_ids": prompt_ids,
+             "attention_mask": prompt_attention_mask,
+             "position_ids": position_ids,
+-            
+-            # uid用于GRPO分组
+             "uid": prompt_id,
+-            
+-            # 数据来源
+             "data_source": item.get("data_source", "offline_rollout"),
+-            
+-            # 离线数据特有字段
+             "responses": response_ids,
+-            "rollout_log_probs": small_model_log_probs,
+-            "offline_reward": torch.tensor(float(item["reward"]), dtype=torch.float32),  # 注意：返回tensor
+-            
+-            # 其他元信息
++            "rollout_log_probs": rollout_log_probs,
++            "token_level_scores": token_level_scores,
++            "response_mask": response_mask,
++            "offline_reward": torch.tensor(reward_value, dtype=torch.float32),
+             "is_correct": item.get("is_correct", False),
+         }
+-        
+-        # 5. reward_model字段（用于兼容）
++
+         result["reward_model"] = {
+             "style": "offline",
+             "ground_truth": item.get("ground_truth", None),
+         }
+-        
++
+         return result
+     
+     def __getstate__(self):
+         """支持checkpoint保存"""
+         return self.__dict__.copy()
+     
+     def resume_dataset_state(self):
+         """支持checkpoint恢复"""
+         pass
+ 
+ 
+ def offline_rollout_collate_fn(batch_list):
+     """
+     自定义collate函数
+     
+     输入：batch_list = [
+         [sample1, sample2, ..., sampleN],  # prompt_0的N个samples（每个sample是dict）
+         [sample1, sample2, ..., sampleN],  # prompt_1的N个samples
+         ...
+     ]
+     
+     输出：标准的batch dict
+     """
+     # Flatten所有samples
+     all_samples = []
+     for samples_group in batch_list:
+         if isinstance(samples_group, list):
+             all_samples.extend(samples_group)
+         else:
+             # 单个sample的情况
+             all_samples.append(samples_group)
+     
+     # 使用标准collate_fn
+     from verl.utils.dataset.rl_dataset import collate_fn as standard_collate_fn
+     
+     try:
+         result = standard_collate_fn(all_samples)
+     except Exception as e:
+         print(f"Collate error: {e}")
+         print(f"Number of samples: {len(all_samples)}")
+         if all_samples:
+             print(f"Sample keys: {all_samples[0].keys()}")
+         raise
+     
+-    return result
+\ No newline at end of file
++    return result
+ 
+EOF
+)
