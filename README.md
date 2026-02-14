@@ -1,6 +1,6 @@
 # S2L-PO: Smaller Models are Natural Explorers for Policy-Level Diversity in GRPO
 
-[![Framework](S2L-PO/method.png)]
+[![Framework](https://github.com/qishisuren123/S2L-PO/blob/main/method.png)]
 
 Official implementation of **"Smaller Models are Natural Explorers for Policy-Level Diversity in GRPO"**.
 
