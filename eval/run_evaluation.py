@@ -1,6 +1,9 @@
 """
+End-to-end evaluation pipeline for S2L-PO models.
+
 Usage:
-    python run_evaluation.py --model_path Qwen/Qwen3-4B --mode think --k 10
+    python run_evaluation.py --model_path /path/to/model --mode nothink --k 32
+    python run_evaluation.py --model_path /path/to/model --mode think   --k 16 --benchmarks aime24 aime25
 """
 import argparse
 from datetime import datetime
@@ -20,6 +23,7 @@ except ImportError as e:
 
 
 def parse_args():
+    """解析命令行参数"""
     parser = argparse.ArgumentParser(
         description="Run Qwen3 evaluation on AIME24/25 and MATH500 benchmarks",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -69,7 +73,7 @@ Examples:
         type=str,
         nargs="+",
         default=["aime24", "aime25", "math500"],
-        choices=["aime24", "aime25", "math500"],
+        choices=["aime24", "aime25", "math500", "olympiadbench"],
         help="Benchmarks to evaluate. Default: all three benchmarks"
     )
     
@@ -119,41 +123,66 @@ Examples:
         default=None,
         help="Batch size for inference. None means process all examples at once. Default: None"
     )
-    
+
+    parser.add_argument(
+        "--max_model_len",
+        type=int,
+        default=None,
+        help="Maximum model sequence length. Overrides the model's default max_position_embeddings. "
+             "Useful for models with very large context (e.g., InternLM2.5 524288) that exceed GPU memory."
+    )
+
     return parser.parse_args()
 
 
 def validate_args(args):
+    """
+    验证参数有效性
+    
+    Args:
+        args: 解析后的命令行参数
+    
+    Raises:
+        SystemExit: 如果参数无效
+    """
     errors = []
     warnings = []
     
+    # 验证k值
     if args.k < 1:
         errors.append(f"k must be at least 1, got {args.k}")
     elif args.k > 100:
         warnings.append(f"k={args.k} is very large, this will take a long time")
     
+    # 验证GPU数量
     if args.tensor_parallel_size < 1:
         errors.append(f"tensor_parallel_size must be at least 1, got {args.tensor_parallel_size}")
     
+    # 验证GPU内存利用率
     if not (0.0 < args.gpu_memory_utilization <= 1.0):
         errors.append(f"gpu_memory_utilization must be between 0 and 1, got {args.gpu_memory_utilization}")
     
+    # 如果跳过推理，必须提供timestamp
     if args.skip_inference and args.timestamp is None:
         errors.append("--timestamp is required when using --skip_inference")
     
+    # 如果跳过提取，也必须跳过推理
     if args.skip_extraction and not args.skip_inference:
         errors.append("--skip_extraction requires --skip_inference (you must skip inference first)")
     
+    # 验证timestamp格式（如果提供）
     if args.timestamp is not None:
         if not args.timestamp.isdigit() or len(args.timestamp) != 12:
             errors.append(f"Invalid timestamp format: '{args.timestamp}'. Expected format: YYMMDDHHMMSS (12 digits)")
         
+        # 检查对应的输出目录是否存在
         if args.skip_inference:
             model_name = args.model_path.rstrip('/').split('/')[-1]
             output_dir = Path(f"output/{model_name}_{args.timestamp}")
             if not output_dir.exists():
                 errors.append(f"Output directory not found: {output_dir}")
     
+    # 检查数据文件是否存在
     if not args.skip_inference:
         data_dir = Path("data")
         if not data_dir.exists():
@@ -168,6 +197,7 @@ def validate_args(args):
             if missing_files:
                 errors.append(f"Missing dataset files: {', '.join(missing_files)}")
     
+    # 显示错误
     if errors:
         print("❌ Validation errors:")
         for error in errors:
@@ -175,6 +205,7 @@ def validate_args(args):
         print()
         sys.exit(1)
     
+    # 显示警告
     if warnings:
         print("⚠ Warnings:")
         for warning in warnings:
@@ -185,6 +216,16 @@ def validate_args(args):
 
 
 def print_config_summary(args, model_name, timestamp, output_dir, result_dir):
+    """
+    打印配置摘要
+    
+    Args:
+        args: 命令行参数
+        model_name: 模型名称
+        timestamp: 时间戳
+        output_dir: 输出目录
+        result_dir: 结果目录
+    """
     print("="*80)
     print("Qwen3 Evaluation Pipeline Configuration")
     print("="*80)
@@ -200,6 +241,7 @@ def print_config_summary(args, model_name, timestamp, output_dir, result_dir):
     print(f"Result Directory:        {result_dir}")
     print("="*80)
     
+    # 显示采样参数
     if args.mode == "think":
         print("\nSampling Parameters (Thinking Mode):")
         print("  - Temperature: 0.6")
@@ -217,6 +259,7 @@ def print_config_summary(args, model_name, timestamp, output_dir, result_dir):
     
     print()
     
+    # 显示跳过的步骤
     if args.skip_inference or args.skip_extraction:
         print("Pipeline Steps:")
         print(f"  Step 1 (Inference):   {'⊘ SKIPPED' if args.skip_inference else '✓ ENABLED'}")
@@ -226,14 +269,18 @@ def print_config_summary(args, model_name, timestamp, output_dir, result_dir):
 
 
 def main():
+    """主函数"""
     print("\n" + "="*80)
     print("Qwen3 Model Evaluation System")
     print("="*80 + "\n")
     
+    # 解析参数
     args = parse_args()
     
+    # 验证参数
     validate_args(args)
     
+    # 生成或使用已有的时间戳
     if args.timestamp:
         timestamp = args.timestamp
         print(f"📅 Using existing timestamp: {timestamp}\n")
@@ -241,14 +288,18 @@ def main():
         timestamp = datetime.now().strftime("%y%m%d%H%M%S")
         print(f"📅 Generated new timestamp: {timestamp}\n")
     
+    # 提取模型名称
     model_name = args.model_path.rstrip('/').split('/')[-1]
     
+    # 创建输出和结果目录
     output_dir = Path(f"output/{model_name}_{timestamp}")
     result_dir = Path(f"result/{model_name}_{timestamp}")
     
+    # 打印配置摘要
     print_config_summary(args, model_name, timestamp, output_dir, result_dir)
     
     try:
+        # Step 1: 推理
         if not args.skip_inference:
             print("="*80)
             print("Step 1/3: Running Inference")
@@ -268,6 +319,7 @@ def main():
                     tensor_parallel_size=args.tensor_parallel_size,
                     gpu_memory_utilization=args.gpu_memory_utilization,
                     batch_size=args.batch_size,
+                    max_model_len=getattr(args, 'max_model_len', None),
                 )
                 
                 print(f"\n✓ Completed benchmark: {benchmark.upper()}")
@@ -278,6 +330,7 @@ def main():
             print("Using existing raw outputs from:", output_dir)
             print()
         
+        # Step 2: 提取答案
         if not args.skip_extraction:
             print("\n" + "="*80)
             print("Step 2/3: Extracting Answers")
@@ -291,12 +344,14 @@ def main():
             print("Using existing extracted answers from:", output_dir)
             print()
         
+        # Step 3: 打分
         print("\n" + "="*80)
         print("Step 3/3: Scoring and Evaluation")
         print("="*80 + "\n")
         
         score_all_benchmarks(output_dir, result_dir)
         
+        # 完成
         print("\n" + "="*80)
         print("✓ Evaluation Pipeline Completed Successfully!")
         print("="*80 + "\n")
@@ -307,13 +362,14 @@ def main():
         print()
         
         print("📊 View Results:")
-        print(f"   python view_results.py --result_dir {result_dir}")
+        print(f"   cat {result_dir}/summary.json")
         print()
         
         print("📄 Summary File:")
         print(f"   {result_dir}/summary.json")
         print()
         
+        # 显示简要结果
         summary_file = result_dir / "summary.json"
         if summary_file.exists():
             import json

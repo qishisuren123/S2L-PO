@@ -1,210 +1,190 @@
-# S2L-PO: Smaller Models are Natural Explorers for Policy-Level Diversity in GRPO
+# Smaller Models are Natural Explorers for Policy-Level Diversity in GRPO
 
-![Framework](https://github.com/qishisuren123/S2L-PO/blob/main/method.png)
+<div align="center">
 
-## Overview
+[![Paper](https://img.shields.io/badge/Paper-ICML%202026-blue?style=flat-square&logo=arxiv)](https://arxiv.org/abs/XXXX.XXXXX)
+[![Project Page](https://img.shields.io/badge/Project-Page-green?style=flat-square&logo=github)](https://YOUR_PROJECT_PAGE_URL)
+[![Models](https://img.shields.io/badge/🤗%20Models-HuggingFace-orange?style=flat-square)](https://huggingface.co/collections/YOUR_HF_COLLECTION)
+[![License](https://img.shields.io/badge/License-Apache%202.0-lightgrey?style=flat-square)](LICENSE)
 
-S2L-PO (Small-to-Large Policy Optimization) is a novel framework that leverages smaller models as natural explorers to enhance rollout diversity in Group Relative Policy Optimization (GRPO) for large language models. Unlike traditional token-level perturbations (e.g., temperature scaling), S2L-PO introduces **policy-level diversity** through parameter-level compression, providing temporally consistent and structured exploration signals.
+**ICML 2026**
 
-### Key Features
+[Yiming Ren]()\*, [Yiran Xu]()\*, [Zicheng Lin]()\*, [Chufan Shi](), [Yukang Chen](), [Dingdong Wang](), [Tianhe Wu](), [Jujie Wang](), [Yujiu Yang](), [Yu Qiao]()†, [Ruihang Chu]()†
 
-- **Policy-Level Diversity**: Utilizes smaller models' inherent diversity stemming from parameter compression rather than token-level randomness
-- **Progressive Annealing**: Smoothly transitions from small-model exploration to on-policy learning, balancing exploration and exploitation
-- **Computational Efficiency**: Reduces rollout compute by offloading generation to smaller models while achieving superior performance
-- **Easy Integration**: Seamlessly compatible with existing GRPO implementations
+\*Equal contribution  &emsp; †Corresponding authors
 
-### Main Results
+</div>
 
-- **+8.8% improvement** on AIME 2024 (using 1.7B explorer to guide 8B model)
-- **Faster convergence** with fewer effective training steps
-- **Better sample efficiency** across mathematical reasoning benchmarks
-- **Maintained generalization** on out-of-domain tasks (CommonsenseQA)
+---
 
-## Table of Contents
+## Why S2L-PO?
 
-- [Installation](#installation)
-- [Project Structure](#project-structure)
-- [Quick Start](#quick-start)
-  - [1. Environment Setup](#1-environment-setup)
-  - [2. Data Preparation](#2-data-preparation)
-  - [3. Training](#3-training)
-  - [4. Evaluation](#4-evaluation)
-- [Experimental Settings](#experimental-settings)
-- [Reproducing Results](#reproducing-results)
-- [Citation](#citation)
-- [License](#license)
+Modern LLMs benefit enormously from reinforcement learning post-training (e.g., GRPO), but standard on-policy rollouts suffer from **low policy-level diversity**: all candidate solutions are sampled from the same model at the same training step, leading to mode collapse and slow policy improvement.
 
-## Installation
+**S2L-PO (Small-to-Large Policy Optimization)** addresses this from a fresh angle. Rather than increasing *token-level* stochasticity (higher temperature), which accumulates decoding errors over long reasoning chains, we inject **policy-level diversity** by using a *smaller model from the same family* as an explorer:
 
-S2L-PO is built on top of the [verl](https://github.com/volcengine/verl) framework. Please follow verl's installation instructions:
+- The smaller model generates a fraction of the rollout group, providing qualitatively different reasoning trajectories.
+- The larger (target) model is trained on the full mixed-rollout group via standard GRPO.
+- A **progressive annealing** schedule transitions from small-model exploration to fully on-policy learning, combining exploration in early training with stable fine-tuning later.
 
+This is both principled and practical: the small explorer is only used during rollout (not gradient computation), so **the overhead is minimal** while the diversity gains are substantial.
 
-## Project Structure
+<div align="center">
+<img src="assets/method.png" width="720" alt="S2L-PO method overview"/>
+</div>
 
-```
-S2L-PO/
-├── examples/
-│   └── s2l-po/
-│       └── off2on_4b_8b_16_8.sh       # Main training script
-├── verl/
-│   └── examples/
-│       └── run_small_model_sampling.sh # Data preparation script
-├── eval/                              # Evaluation framework
-│   ├── data/                         # Benchmark datasets
-│   │   ├── aime24.jsonl
-│   │   ├── aime25.jsonl
-│   │   └── math500.jsonl
-│   ├── output/                       # Model outputs
-│   ├── result/                       # Evaluation results
-│   ├── inference.py                  # Inference script
-│   ├── extract_answers.py            # Answer extraction
-│   ├── scoring.py                    # Scoring script
-│   └── run_evaluation.py             # Main evaluation script
-└── README.md                         # This file
-```
+### Key Results
 
-## Quick Start
+All models are evaluated in `nothink` mode following the [Qwen3 technical report](https://huggingface.co/Qwen/Qwen3-8B).
 
-### 1. Environment Setup
+| Setting | Method | AIME24 Pass@1 | AIME25 Pass@1 |
+|---------|--------|:---:|:---:|
+| Qwen3-8B learner | GRPO (baseline) | 15.0 | 12.1 |
+| Qwen3-8B learner | **S2L-PO (1.7B explorer)** | **23.8** | **22.5** |
+| Qwen3-8B learner | **S2L-PO (4B explorer)** | **19.1** | **13.3** |
+| Qwen3-14B learner | GRPO (baseline) | 18.0 | 12.9 |
+| Qwen3-14B learner | **S2L-PO (4B explorer)** | **24.4** | **14.6** |
 
-Ensure you have the required dependencies installed as described in the [Installation](#installation) section.
+Using a 1.7B model to guide an 8B learner yields an **average +9% gain** over vanilla GRPO on AIME, while adding only marginal computational overhead. On out-of-domain (CommonsenseQA) evaluations, S2L-PO matches or slightly improves over GRPO, demonstrating that the gains do **not** sacrifice general reasoning ability.
 
-### 2. Data Preparation
+---
 
-Generate rollouts from the smaller model for offline exploration:
+## Released Models
 
-```bash
-cd S2L-PO/verl/examples
-bash run_small_model_sampling.sh
-```
+We release the final checkpoints of the Qwen3-series S2L-PO learner models:
 
-This script will:
-- Load the smaller model (e.g., Qwen3-1.7B or Qwen3-4B)
-- Generate diverse rollouts on the training dataset
-- Save rollouts for use in the progressive training phase
+| Model | HuggingFace | Explorer | Learner |
+|-------|-------------|----------|---------|
+| Qwen3-8B-S2L-PO-1.7Bexplorer | [🤗 Link](https://huggingface.co/YOUR_HF_ID/Qwen3-8B-S2L-PO-1.7Bexplorer) | Qwen3-1.7B-Base | Qwen3-8B-Base |
+| Qwen3-8B-S2L-PO-4Bexplorer | [🤗 Link](https://huggingface.co/YOUR_HF_ID/Qwen3-8B-S2L-PO-4Bexplorer) | Qwen3-4B-Base | Qwen3-8B-Base |
+| Qwen3-14B-S2L-PO-4Bexplorer | [🤗 Link](https://huggingface.co/YOUR_HF_ID/Qwen3-14B-S2L-PO-4Bexplorer) | Qwen3-4B-Base | Qwen3-14B-Base |
 
-**Configuration**: Edit the script to specify:
-- `--model_path`: Path to the small model
-- `--dataset`: Training dataset (default: DAPO17k)
-- `--output_dir`: Directory to save generated rollouts
+> **Note:** Model weights will be made publicly available upon acceptance notification. Stay tuned!
 
-### 3. Training
+---
 
-Run the main S2L-PO training with progressive annealing:
+## Environment Setup
+
+### Requirements
+
+- Python ≥ 3.10
+- CUDA ≥ 12.1
+- GPU memory: ~20 GB per 8B model, ~32 GB per 14B model
+
+### Installation
 
 ```bash
-cd S2L-PO/examples/s2l-po
-bash off2on_4b_8b_16_8.sh
+pip install vllm>=0.8.0 transformers>=4.51.0 tqdm
 ```
 
-This script implements the core S2L-PO algorithm:
-- **Phase 1 (Steps 1-N)**: Progressive transition from small-model rollouts to large-model rollouts
-- **Phase 2 (Steps N+1-)**: Full on-policy GRPO training
+For a complete reproducible environment:
 
-
-**Customization**: Modify the script for different model pairs:
 ```bash
-# Example: Using 1.7B to guide 8B
---small_model_path Qwen/Qwen3-1.7B \
---large_model_path Qwen/Qwen3-8B
-
-# Example: Using 4B to guide 14B
---small_model_path Qwen/Qwen3-4B \
---large_model_path Qwen/Qwen3-14B
+conda create -n s2l-po python=3.11 -y
+conda activate s2l-po
+pip install vllm transformers tqdm
 ```
 
-### 4. Evaluation
+---
 
-After training, evaluate the model on mathematical reasoning benchmarks:
+## Evaluation
+
+All evaluation code lives in [`eval/`](eval/). The pipeline has three stages:
+
+1. **Inference** — generate *k* candidate solutions per question using vLLM
+2. **Answer Extraction** — parse `\boxed{}` or numeric answers from raw outputs
+3. **Scoring** — compute Pass@k using the unbiased estimator
+
+### Quick Start
 
 ```bash
-cd S2L-PO/eval
+cd eval
 
-# Full evaluation on all benchmarks (AIME24, AIME25, MATH500)
+# Evaluate a single model on AIME24 + AIME25 (32 samples per question)
 python run_evaluation.py \
-    --model_path /path/to/trained/model \
+    --model_path /path/to/Qwen3-8B-S2L-PO-1.7Bexplorer \
     --mode nothink \
-    --k 16 \
-    --tensor_parallel_size 1
-
-# Evaluate on specific benchmarks
-python run_evaluation.py \
-    --model_path /path/to/trained/model \
-    --mode nothink \
-    --k 16 \
+    --k 32 \
     --benchmarks aime24 aime25
+
+# View results
+cat result/Qwen3-8B-S2L-PO-1.7Bexplorer_<timestamp>/summary.json
 ```
 
-**Evaluation Parameters**:
-- `--model_path`: Path to the trained model checkpoint
-- `--mode`: Evaluation mode (`think` or `nothink`)
-  - `think`: Temperature=0.6, top-p=0.95, top-k=20
-  - `nothink`: Temperature=0.7, top-p=0.8, top-k=20, presence_penalty=1.5
-- `--k`: Number of rollouts per question for Pass@k computation (default: 16)
-- `--benchmarks`: Specific benchmarks to evaluate (default: all)
-- `--tensor_parallel_size`: Number of GPUs for parallel inference
+### Evaluate All Three Models in Parallel
 
-**Output Files**:
+```bash
+cd eval
+bash eval_s2l_po.sh /path/to/release 32 nothink
+```
+
+This launches one process per GPU and evaluates all three models simultaneously.
+
+### Parameter Reference
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--model_path` | — | Local path or HuggingFace model ID |
+| `--mode` | — | `think` (thinking mode) or `nothink` |
+| `--k` | 10 | Samples per question for Pass@k |
+| `--benchmarks` | all | Space-separated list: `aime24 aime25 math500 olympiadbench` |
+| `--tensor_parallel_size` | 1 | Number of GPUs for tensor parallelism |
+| `--gpu_memory_utilization` | 0.9 | vLLM GPU memory fraction |
+
+### Supported Benchmarks
+
+| Benchmark | # Problems | Domain |
+|-----------|:----------:|--------|
+| AIME 2024 | 30 | Competition mathematics |
+| AIME 2025 | 30 | Competition mathematics |
+| MATH-500 | 500 | High-school to competition math |
+| OlympiadBench | 675 | International olympiad problems |
+
+### Sampling Configurations
+
+Following the Qwen3 technical report:
+
+| Mode | Temperature | Top-p | Top-k | Presence Penalty |
+|------|:-----------:|:-----:|:-----:|:----------------:|
+| `think` | 0.6 | 0.95 | 20 | 0.0 |
+| `nothink` | 0.7 | 0.8 | 20 | 1.5 |
+
+> We evaluate in `nothink` mode in the paper. The `think` mode typically yields higher single-sample accuracy but at greater token cost.
+
+### Output Format
+
 ```
 eval/
-├── output/
-│   └── ModelName_TIMESTAMP/
-│       ├── config.txt              # Configuration
-│       ├── aime24_raw.jsonl        # Raw model outputs
-│       ├── aime24.jsonl            # Extracted answers
-│       └── ...
-└── result/
-    └── ModelName_TIMESTAMP/
-        ├── aime24.json             # Per-benchmark results
-        ├── aime25.json
-        ├── math500.json
-        └── summary.json            # Aggregated results
+├── output/<model>_<timestamp>/
+│   ├── config.txt            # run configuration
+│   ├── aime24_raw.jsonl      # raw model generations
+│   ├── aime24.jsonl          # extracted answers
+│   └── ...
+└── result/<model>_<timestamp>/
+    ├── aime24.json           # per-benchmark scores
+    ├── aime25.json
+    ├── math500.json
+    └── summary.json          # full Pass@k table
 ```
 
-**Evaluation Metrics**:
-- **Pass@1**: Probability of getting the correct answer in a single attempt
-- **Pass@k**: Probability of getting at least one correct answer in k attempts
-- **Accuracy**: Overall percentage of correctly solved problems
-
-**Note**: The same evaluation procedure applies to other mathematical reasoning benchmarks. Simply place your benchmark data in `eval/data/` following the format:
-```json
-{"question": "Problem statement", "answer": "Ground truth answer"}
-```
-
-## Experimental Settings
-
-### Training Configuration
-
-- **Base Models**: Qwen3 series (1.7B, 4B, 8B, 14B)
-- **Training Data**: DAPO17k (deduplicated, multi-step reasoning)
-- **Hardware**: 8x NVIDIA L20 GPUs per node
-- **Framework**: verl with default GRPO configuration
-
-
-### S2L-PO Specific Settings
-
-- **Group Size (G)**: 16 rollouts per prompt
-- **Progressive Annealing**:
-  - Steps 1-8: α decreases linearly from 1.0 to 0.0
-  - G_w (small model) = ⌈α × G⌉
-  - G_s (large model) = G - G_w
-  - Steps 9-16: Full on-policy (G_w = 0, G_s = G)
-
-
+---
 
 ## Citation
 
-If you find this work useful, please cite our paper:
+If you find this work useful, please cite:
 
 ```bibtex
-
+@inproceedings{ren2026s2lpo,
+  title     = {Smaller Models are Natural Explorers for Policy-Level Diversity in {GRPO}},
+  author    = {Ren, Yiming and Xu, Yiran and Lin, Zicheng and Shi, Chufan and Chen, Yukang and
+               Wang, Dingdong and Wu, Tianhe and Wang, Jujie and Yang, Yujiu and Qiao, Yu and Chu, Ruihang},
+  booktitle = {International Conference on Machine Learning (ICML)},
+  year      = {2026},
+}
 ```
+
+---
 
 ## License
 
-This project is released under the MIT License. See [LICENSE](LICENSE) for details.
-
-## Acknowledgments
-
-- Built on the [verl](https://github.com/volcengine/verl) framework
-- Uses [Qwen3](https://github.com/QwenLM/Qwen3) base models
+This project is released under the [Apache 2.0 License](LICENSE).
