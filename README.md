@@ -82,7 +82,7 @@ For a complete reproducible environment:
 ```bash
 conda create -n s2l-po python=3.11 -y
 conda activate s2l-po
-pip install vllm transformers tqdm
+pip install "vllm>=0.8.4" "transformers>=4.51.0" tqdm
 ```
 
 ---
@@ -139,6 +139,22 @@ This launches one process per GPU and evaluates all three models simultaneously.
 | AIME 2025 | 30 | Competition mathematics |
 | MATH-500 | 500 | High-school to competition math |
 | OlympiadBench | 675 | International olympiad problems |
+| CommonsenseQA | 1221 | Out-of-domain commonsense (OOD) |
+
+### Preparing Benchmark Data
+
+Benchmark data files are **not included** in this repository. Please download them from their original sources and place them under `eval/data/`:
+
+```
+eval/data/
+├── aime24.jsonl          # AIME 2024 — from DAPO / AoPS
+├── aime25.jsonl          # AIME 2025 — from DAPO / AoPS
+├── math500.jsonl         # MATH-500 — from hendrycks/competition_math
+├── olympiadbench.jsonl   # OlympiadBench — from https://github.com/OpenBMB/OlympiadBench
+└── commonsenseqa.jsonl   # CommonsenseQA — from https://www.tau-benchmark.com
+```
+
+Each file should be in JSONL format with at minimum `"question"` and `"answer"` fields per line.
 
 ### Sampling Configurations
 
