@@ -3,8 +3,8 @@
 <div align="center">
 
 [![Paper](https://img.shields.io/badge/Paper-ICML%202026-blue?style=flat-square&logo=arxiv)](https://arxiv.org/abs/XXXX.XXXXX)
-[![Project Page](https://img.shields.io/badge/Project-Page-green?style=flat-square&logo=github)](https://YOUR_PROJECT_PAGE_URL)
-[![Models](https://img.shields.io/badge/🤗%20Models-HuggingFace-orange?style=flat-square)](https://huggingface.co/collections/YOUR_HF_COLLECTION)
+[![Project Page](https://img.shields.io/badge/Project-Page-green?style=flat-square&logo=github)](https://qishisuren123.github.io/S2L-PO)
+[![Models](https://img.shields.io/badge/🤗%20Models-HuggingFace-orange?style=flat-square)](https://huggingface.co/qishisuren)
 [![License](https://img.shields.io/badge/License-Apache%202.0-lightgrey?style=flat-square)](LICENSE)
 
 **ICML 2026**
@@ -55,9 +55,9 @@ We release the final checkpoints of the Qwen3-series S2L-PO learner models:
 
 | Model | HuggingFace | Explorer | Learner |
 |-------|-------------|----------|---------|
-| Qwen3-8B-S2L-PO-1.7Bexplorer | [🤗 Link](https://huggingface.co/YOUR_HF_ID/Qwen3-8B-S2L-PO-1.7Bexplorer) | Qwen3-1.7B-Base | Qwen3-8B-Base |
-| Qwen3-8B-S2L-PO-4Bexplorer | [🤗 Link](https://huggingface.co/YOUR_HF_ID/Qwen3-8B-S2L-PO-4Bexplorer) | Qwen3-4B-Base | Qwen3-8B-Base |
-| Qwen3-14B-S2L-PO-4Bexplorer | [🤗 Link](https://huggingface.co/YOUR_HF_ID/Qwen3-14B-S2L-PO-4Bexplorer) | Qwen3-4B-Base | Qwen3-14B-Base |
+| Qwen3-8B-S2L-PO-1.7Bexplorer | [🤗 Link](https://huggingface.co/qishisuren/Qwen3-8B-S2L-PO-1.7Bexplorer) | Qwen3-1.7B-Base | Qwen3-8B-Base |
+| Qwen3-8B-S2L-PO-4Bexplorer | [🤗 Link](https://huggingface.co/qishisuren/Qwen3-8B-S2L-PO-4Bexplorer) | Qwen3-4B-Base | Qwen3-8B-Base |
+| Qwen3-14B-S2L-PO-4Bexplorer | [🤗 Link](https://huggingface.co/qishisuren/Qwen3-14B-S2L-PO-4Bexplorer) | Qwen3-4B-Base | Qwen3-14B-Base |
 
 > **Note:** Model weights will be made publicly available upon acceptance notification. Stay tuned!
 

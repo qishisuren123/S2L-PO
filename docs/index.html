@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>S2L-PO: Smaller Models are Natural Explorers for Policy-Level Diversity in GRPO</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500;1,700&family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+</style>
+<style>
+:root {
+  --bg-deep: #050814;
+  --bg-paper: #0c1226;
+  --bg-card: #11193a;
+  --bg-card-hi: #182350;
+  --line: rgba(140,170,255,0.18);
+  --line-strong: rgba(140,170,255,0.35);
+  --ink: #f3f6ff;
+  --ink-soft: #d2dbf7;
+  --ink-mute: #8c97c4;
+  --accent-red: #e8324f;
+  --accent-red-soft: rgba(232,50,79,0.20);
+  --accent-teal: #36c8ce;
+  --accent-teal-soft: rgba(54,200,206,0.18);
+  --accent-gold: #f3c977;
+  --serif: 'Crimson Pro', 'Source Serif Pro', 'DejaVu Serif', Georgia, serif;
+  --sans: 'Inter', 'Helvetica Neue', 'DejaVu Sans', Arial, sans-serif;
+  --mono: 'JetBrains Mono', 'SFMono-Regular', 'DejaVu Sans Mono', Menlo, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  background: var(--bg-deep);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+body::before {
+  content: "";
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 18% 0%, rgba(47,186,192,0.18), transparent 60%),
+    radial-gradient(ellipse 80% 50% at 82% 0%, rgba(217,43,75,0.18), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 50% 100%, rgba(241,199,114,0.10), transparent 70%);
+  z-index: -2;
+  pointer-events: none;
+}
+body::after {
+  content: "";
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(rgba(140,170,255,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(140,170,255,0.05) 1px, transparent 1px);
+  background-size: 64px 64px;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.shell { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
+
+/* --- top bar --- */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 22px 32px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(5,8,20,0.6);
+}
+.topbar .brand {
+  display: flex; align-items: center; gap: 12px;
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: 0.02em;
+}
+.topbar .brand .mark {
+  width: 32px; height: 32px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: linear-gradient(135deg, rgba(47,186,192,0.18), rgba(217,43,75,0.18));
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink);
+}
+.topbar nav {
+  display: flex; gap: 22px;
+  font-size: 14px; color: var(--ink-soft);
+  font-weight: 500;
+}
+.topbar nav a { color: inherit; text-decoration: none; }
+.topbar nav a:hover { color: var(--ink); }
+.topbar .venue {
+  font-family: var(--mono); font-size: 12px;
+  padding: 6px 12px;
+  border: 1px solid var(--accent-gold);
+  color: var(--accent-gold);
+  border-radius: 999px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* --- HERO --- */
+.hero { padding: 88px 0 60px; }
+.hero .meta-row {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--mono); font-size: 12px; color: var(--ink-mute);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-bottom: 28px;
+}
+.hero .meta-row .pill {
+  padding: 6px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--ink-soft);
+}
+.hero .meta-row .pill.accent {
+  border-color: var(--accent-gold);
+  color: var(--accent-gold);
+}
+.hero h1 {
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: 72px;
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  margin-bottom: 28px;
+  max-width: 1000px;
+}
+.hero h1 .hl {
+  color: var(--accent-red);
+  font-style: italic;
+  position: relative;
+}
+.hero h1 .hl::after {
+  content: "";
+  display: block;
+  position: absolute;
+  left: 0; right: 0; bottom: -6px;
+  height: 4px;
+  background: linear-gradient(90deg, var(--accent-teal), var(--accent-red));
+  border-radius: 2px;
+  opacity: 0.85;
+}
+.hero .subtitle {
+  font-size: 22px;
+  color: var(--ink-soft);
+  max-width: 900px;
+  line-height: 1.5;
+  font-weight: 300;
+}
+.hero .subtitle b { color: var(--ink); font-weight: 600; }
+.hero .author-strip {
+  margin-top: 44px;
+  font-size: 15px; color: var(--ink-soft);
+}
+.hero .author-strip .label {
+  color: var(--ink-mute);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  margin-right: 12px;
+}
+.hero .cta-row {
+  margin-top: 36px;
+  display: flex; gap: 12px; flex-wrap: wrap;
+}
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 14px; font-weight: 600;
+  text-decoration: none;
+  border: 1px solid var(--line-strong);
+  color: var(--ink);
+  background: rgba(255,255,255,0.02);
+  transition: all .15s ease;
+  font-family: var(--sans);
+}
+.btn:hover { background: rgba(255,255,255,0.06); border-color: rgba(140,170,255,0.5); }
+.btn.primary {
+  background: linear-gradient(135deg, var(--accent-red), #b41b3b);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 8px 28px rgba(217,43,75,0.35);
+}
+.btn.primary:hover { filter: brightness(1.05); }
+.btn .ico { font-family: var(--mono); font-size: 12px; opacity: 0.9; }
+
+/* --- TL;DR --- */
+.tldr {
+  margin-top: 56px;
+  padding: 32px 36px;
+  background: linear-gradient(135deg, rgba(47,186,192,0.07), rgba(217,43,75,0.07));
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent-gold);
+  border-radius: 16px;
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+.tldr .stamp {
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--accent-gold);
+  padding-top: 4px;
+}
+.tldr p {
+  font-family: var(--serif);
+  font-size: 21px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.tldr p .lit { color: var(--accent-teal); font-style: italic; font-weight: 600; }
+.tldr p .lit-r { color: var(--accent-red); font-style: italic; font-weight: 600; }
+
+/* --- stat row --- */
+.stats {
+  margin-top: 64px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+.stat {
+  padding: 26px 22px;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  position: relative;
+  overflow: hidden;
+}
+.stat::before {
+  content: "";
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--accent-red), transparent);
+}
+.stat:nth-child(2)::before { background: linear-gradient(180deg, var(--accent-teal), transparent); }
+.stat:nth-child(3)::before { background: linear-gradient(180deg, var(--accent-gold), transparent); }
+.stat:nth-child(4)::before { background: linear-gradient(180deg, #9d7df7, transparent); }
+.stat .v {
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: 44px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.stat .v .unit { font-family: var(--mono); font-size: 17px; font-weight: 500; color: var(--ink-soft); letter-spacing: 0.04em; }
+.stat .v .pm { color: var(--accent-red); }
+.stat .k {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+.stat .sub {
+  margin-top: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-mute);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* --- section --- */
+section.body { padding: 96px 0; border-top: 1px solid var(--line); }
+.section-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 36px;
+  gap: 28px;
+}
+.section-head .eyebrow {
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--accent-teal);
+}
+.section-head h2 {
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: 44px;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
+  margin-top: 6px;
+  max-width: 760px;
+}
+.section-head .blurb {
+  max-width: 360px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+/* the key dichotomy section */
+.dichotomy {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-top: 14px;
+}
+.dcard {
+  padding: 28px 28px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--bg-card);
+  position: relative;
+}
+.dcard.teal { background: linear-gradient(135deg, rgba(47,186,192,0.10), rgba(47,186,192,0.02)); border-color: rgba(47,186,192,0.35); }
+.dcard.red  { background: linear-gradient(135deg, rgba(217,43,75,0.10), rgba(217,43,75,0.02));  border-color: rgba(217,43,75,0.40); }
+.dcard .tag {
+  display: inline-block;
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  padding: 5px 10px; border-radius: 6px;
+  margin-bottom: 14px;
+}
+.dcard.teal .tag { background: rgba(47,186,192,0.18); color: var(--accent-teal); }
+.dcard.red  .tag { background: rgba(217,43,75,0.20); color: #ff7286; }
+.dcard h3 {
+  font-family: var(--serif);
+  font-size: 28px; font-weight: 700;
+  line-height: 1.15; letter-spacing: -0.01em;
+  margin-bottom: 12px;
+}
+.dcard .desc { color: var(--ink-soft); font-size: 15px; margin-bottom: 18px; }
+.dcard ul { list-style: none; }
+.dcard ul li {
+  position: relative;
+  padding-left: 22px;
+  margin-bottom: 8px;
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+.dcard ul li::before {
+  content: "→";
+  position: absolute; left: 0;
+  font-family: var(--mono);
+  color: var(--ink-mute);
+}
+.dcard.teal ul li::before { color: var(--accent-teal); }
+.dcard.red  ul li::before { color: var(--accent-red); }
+.dcard .footnote {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--line-strong);
+  font-family: var(--mono); font-size: 12px; color: var(--ink-mute);
+  letter-spacing: 0.04em;
+}
+
+/* concept fig row */
+.fig-wrap {
+  margin-top: 28px;
+  padding: 28px;
+  background: var(--bg-paper);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  text-align: center;
+}
+.fig-wrap img { max-width: 100%; height: auto; border-radius: 8px; background: white; }
+.fig-wrap .cap {
+  margin-top: 18px;
+  font-size: 13px;
+  color: var(--ink-mute);
+  font-family: var(--serif);
+  font-style: italic;
+  letter-spacing: 0.01em;
+}
+
+/* method */
+.method-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 28px;
+  align-items: stretch;
+}
+.method-card {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 32px;
+}
+.method-card h3 {
+  font-family: var(--serif);
+  font-size: 26px;
+  margin-bottom: 12px;
+  letter-spacing: -0.01em;
+}
+.method-card p { color: var(--ink-soft); font-size: 15px; margin-bottom: 14px; }
+.method-card .pill-row { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+.kv { display: flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 12px;
+  padding: 6px 10px; border-radius: 6px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+}
+.kv .k { color: var(--ink-mute); }
+
+/* algorithm block */
+.algo {
+  background: var(--bg-paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 20px 22px;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--ink-soft);
+  margin-top: 10px;
+}
+.algo .kw { color: var(--accent-teal); font-weight: 600; }
+.algo .num { color: var(--accent-gold); }
+.algo .var { color: #ff8a9d; }
+.algo .com { color: var(--ink-mute); font-style: italic; }
+
+/* results */
+.result-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.result-card {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 24px;
+}
+.result-card .label {
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--ink-mute);
+  margin-bottom: 12px;
+}
+.result-card table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.result-card th, .result-card td {
+  text-align: left;
+  padding: 10px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.result-card th {
+  font-weight: 600; color: var(--ink-soft);
+  font-size: 12px; text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.result-card td.num { font-family: var(--mono); font-size: 14px; text-align: right; color: var(--ink-soft); }
+.result-card tr.hi td.num { color: var(--accent-red); font-weight: 700; }
+.result-card tr.hi td.method { color: var(--ink); font-weight: 600; }
+.result-card .method { color: var(--ink-soft); }
+.result-card .delta {
+  display: inline-block;
+  margin-left: 6px;
+  font-family: var(--mono); font-size: 11px;
+  padding: 1px 6px;
+  background: var(--accent-red-soft);
+  color: #ff8094;
+  border-radius: 4px;
+}
+
+.curves-row {
+  margin-top: 28px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.curves-row .fig-wrap { margin-top: 0; }
+
+/* bibtex */
+.bib-block {
+  background: var(--bg-paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 22px 24px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink-soft);
+  white-space: pre;
+  overflow-x: auto;
+  line-height: 1.7;
+}
+.bib-block .k { color: var(--accent-teal); }
+.bib-block .v { color: var(--ink); }
+
+/* footer */
+footer {
+  border-top: 1px solid var(--line);
+  padding: 30px 0 60px;
+  font-size: 13px;
+  color: var(--ink-mute);
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
+}
+footer .row { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+</style>
+</head>
+<body>
+
+<div class="topbar shell" style="max-width: none;">
+  <div class="brand">
+    <span class="mark">∑→</span>
+    S2L-PO
+  </div>
+  <nav>
+    <a href="#insight">Insight</a>
+    <a href="#method">Method</a>
+    <a href="#results">Results</a>
+    <a href="#cite">Cite</a>
+  </nav>
+  <div class="venue">ICML&nbsp;2026</div>
+</div>
+
+<section class="hero shell">
+  <div class="meta-row">
+    <span class="pill accent">Accepted · ICML 2026</span>
+    <span class="pill">Reinforcement Learning</span>
+    <span class="pill">LLM Reasoning</span>
+    <span class="pill">GRPO</span>
+  </div>
+  <h1>
+    Smaller models are <span class="hl">natural explorers</span><br/>
+    for policy-level diversity in GRPO.
+  </h1>
+  <p class="subtitle">
+    <b>S2L-PO</b> rethinks how diversity should enter GRPO rollouts. Instead of injecting more <i>token-level</i> noise — which compounds over long reasoning chains — we use a <b>frozen smaller model</b> as a structured, temporally coherent explorer, then progressively anneal back to on-policy. The result: <b>+8.8% on AIME 24</b> with <b>fewer FLOPs</b>.
+  </p>
+
+  <div class="author-strip">
+    <span class="label">Authors</span>
+    Yiming Ren*, Yiran Xu*, Zicheng Lin*, Chufan Shi, Yukang Chen, Dingdong Wang, Tianhe Wu, Jujie Wang, Yujiu Yang, Yu Qiao†, Ruihang Chu†
+  </div>
+
+  <div class="cta-row">
+    <a class="btn primary" href="#">
+      <span class="ico">[PDF]</span> Paper
+    </a>
+    <a class="btn" href="https://github.com/qishisuren123/S2L-PO">
+      <span class="ico">[ &gt;_ ]</span> Code
+    </a>
+    <a class="btn" href="https://huggingface.co/qishisuren">
+      <span class="ico">[ ↓ ]</span> Checkpoints
+    </a>
+    <a class="btn" href="#cite">
+      <span class="ico">[ @ ]</span> BibTeX
+    </a>
+  </div>
+
+  <div class="tldr">
+    <div class="stamp">TL;DR</div>
+    <p>
+      Bigger models win at <span class="lit">pass@1</span>, but smaller models from the same family win at <span class="lit-r">pass@k</span> for larger k.
+      That gap is <b>not noise</b> — it's <b>policy-level diversity</b> induced by parameter compression. Harness it as exploration, anneal it away as the learner matures, and GRPO trains faster and ceilings higher.
+    </p>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="v"><span class="pm">+8.8</span><span class="unit">&nbsp;pp</span></div>
+      <div class="k">AIME 24 · Qwen3-8B-Base</div>
+      <div class="sub">1.7B explorer → 8B learner</div>
+    </div>
+    <div class="stat">
+      <div class="v"><span class="pm">+10.4</span><span class="unit">&nbsp;pp</span></div>
+      <div class="k">AIME 25 · Qwen3-8B-Base</div>
+      <div class="sub">22.5 vs 12.1 (vanilla GRPO)</div>
+    </div>
+    <div class="stat">
+      <div class="v"><span class="pm">−25</span><span class="unit">%</span></div>
+      <div class="k">Rollout compute</div>
+      <div class="sub">vs. token-level temperature</div>
+    </div>
+    <div class="stat">
+      <div class="v"><span class="pm">+3.9</span><span class="unit">&nbsp;pp</span></div>
+      <div class="k">CommonsenseQA (OOD)</div>
+      <div class="sub">no in-domain regression</div>
+    </div>
+  </div>
+</section>
+
+<section class="body shell" id="insight">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">§ Insight</div>
+      <h2>Two ways to diversify a rollout — one of them stays coherent.</h2>
+    </div>
+    <div class="blurb">
+      Token-level perturbations perturb the action. Policy-level perturbations perturb the policy. Only one of them survives a long reasoning chain.
+    </div>
+  </div>
+
+  <div class="dichotomy">
+    <div class="dcard teal">
+      <span class="tag">Token-level</span>
+      <h3>High-temperature sampling</h3>
+      <p class="desc">Adds i.i.d. randomness per decoding step. Surface diversity is high, but small deviations <b>compound</b> over long chains.</p>
+      <ul>
+        <li>Prefix-match probability decays as (1−p)<sup>t</sup></li>
+        <li>Long-range gradient cross-terms cancel → noisier updates</li>
+        <li>Aggressive temperature ⇒ entropy explosion &amp; mode incoherence</li>
+      </ul>
+      <div class="footnote">π_tok(a | s_t) ∝ exp( l_t(a) / T )</div>
+    </div>
+
+    <div class="dcard red">
+      <span class="tag">Policy-level &nbsp;·&nbsp; ours</span>
+      <h3>Parameter-level compression</h3>
+      <p class="desc">A distilled smaller sibling shifts the <b>whole policy</b> with a single, time-invariant perturbation δθ. Trajectories follow <b>different but coherent</b> strategies.</p>
+      <ul>
+        <li>Same δθ at every step ⇒ temporally correlated shifts</li>
+        <li>Per-step score functions stay aligned → cleaner GRPO gradients</li>
+        <li>Reuses an existing, already-distilled smaller sibling — no extra training cost</li>
+      </ul>
+      <div class="footnote">a_t ∼ π_(θ+δθ)( · | s_t ),&nbsp; δθ = θ_(small) − θ_(large)</div>
+    </div>
+  </div>
+
+  <div class="fig-wrap" style="margin-top: 22px;">
+    <img src="assets/concept.jpg" alt="Token-level vs Policy-level diversity"/>
+    <div class="cap">Figure&nbsp;·&nbsp; <b>Left</b>: token-level diversity bends a single trajectory with step-wise noise. <b>Right</b>: policy-level diversity yields multiple coherent, internally consistent strategies — each path remains a sensible solution.</div>
+  </div>
+</section>
+
+<section class="body shell" id="method">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">§ Method · S2L-PO</div>
+      <h2>Small-to-Large policy optimization with progressive annealing.</h2>
+    </div>
+    <div class="blurb">
+      A drop-in modification to the GRPO rollout phase. Objective, advantage, optimizer — all unchanged.
+    </div>
+  </div>
+
+  <div class="method-grid">
+    <div class="method-card">
+      <h3>One rollout group, two sources.</h3>
+      <p>At step i, sample <b>G<sub>w</sub></b> rollouts from a frozen small explorer π<sub>ω</sub> and <b>G<sub>s</sub></b> from the trainable learner π<sub>θ</sub>. Compute group-relative advantages over the combined group, then optimize the standard GRPO objective.</p>
+      <p>Linearly anneal α<sub>i</sub> = 1 − (i−1)/(T<sub>mix</sub>−1). Early training is exploration-heavy; the second half is fully on-policy.</p>
+      <div class="pill-row">
+        <span class="kv"><span class="k">backbone</span> Qwen3-Base</span>
+        <span class="kv"><span class="k">explorer</span> 1.7B / 4B</span>
+        <span class="kv"><span class="k">learner</span> 8B / 14B</span>
+        <span class="kv"><span class="k">trainer</span> verl · GRPO</span>
+        <span class="kv"><span class="k">data</span> DAPO-17k</span>
+      </div>
+
+      <div class="algo">
+<span class="com"># Algorithm 1 — S2L-PO rollout (G = group size, T = total steps)</span>
+<span class="kw">for</span> i <span class="kw">in</span> 1..T:
+  <span class="kw">if</span> i ≤ T<span class="var">_mix</span>:
+    α    ← 1 − (i−1)/(T<span class="var">_mix</span>−1)
+    G<span class="var">_w</span>  ← ⌈α·G⌉    <span class="com"># small explorer</span>
+    G<span class="var">_s</span>  ← G − G<span class="var">_w</span>   <span class="com"># large learner</span>
+  <span class="kw">else</span>:
+    G<span class="var">_w</span>, G<span class="var">_s</span> ← <span class="num">0</span>, G   <span class="com"># on-policy GRPO</span>
+  O ← sample(π<span class="var">_ω</span>, G<span class="var">_w</span>) ∪ sample(π<span class="var">_θ</span>, G<span class="var">_s</span>)
+  A ← group_relative_advantage(O, r<span class="var">_φ</span>)
+  θ ← argmax<span class="var">_θ</span> J<span class="var">_GRPO</span>(θ; O, A)
+      </div>
+    </div>
+
+    <div class="method-card" style="padding: 0; overflow: hidden;">
+      <img src="assets/method.png" alt="S2L-PO method diagram" style="width: 100%; display: block; background: white;"/>
+      <div style="padding: 18px 22px 22px; color: var(--ink-mute); font-size: 12px; font-family: var(--serif); font-style: italic; line-height: 1.5;">
+        Top: standard GRPO rolls out from a single policy. Bottom: S2L-PO mixes a frozen small explorer with the learner, anneals their ratio over training, and recovers on-policy GRPO by the end.
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="body shell" id="results">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">§ Results</div>
+      <h2>Faster convergence, higher ceiling, lower compute.</h2>
+    </div>
+    <div class="blurb">
+      Numbers below are Pass@1 (%), 16 rollouts per problem, nothink-mode evaluation.
+    </div>
+  </div>
+
+  <div class="result-grid">
+    <div class="result-card">
+      <div class="label">▸ Mathematical Reasoning (Pass@1, %)</div>
+      <table>
+        <thead><tr><th>Method · Qwen3-8B-Base learner</th><th style="text-align:right">AIME 24</th><th style="text-align:right">AIME 25</th></tr></thead>
+        <tbody>
+          <tr><td class="method">GRPO (baseline)</td><td class="num">15.0</td><td class="num">12.1</td></tr>
+          <tr><td class="method">S2L-PO &nbsp;·&nbsp; 4B explorer</td><td class="num">19.1</td><td class="num">13.3</td></tr>
+          <tr class="hi"><td class="method">S2L-PO &nbsp;·&nbsp; 1.7B explorer</td><td class="num">23.8 <span class="delta">+8.8</span></td><td class="num">22.5 <span class="delta">+10.4</span></td></tr>
+        </tbody>
+        <thead><tr><th style="padding-top: 18px">Method · Qwen3-14B-Base learner</th><th style="text-align:right; padding-top: 18px"></th><th style="text-align:right; padding-top: 18px"></th></tr></thead>
+        <tbody>
+          <tr><td class="method">GRPO (baseline)</td><td class="num">18.0</td><td class="num">12.9</td></tr>
+          <tr class="hi"><td class="method">S2L-PO &nbsp;·&nbsp; 4B explorer</td><td class="num">24.4 <span class="delta">+6.4</span></td><td class="num">14.6 <span class="delta">+1.7</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="result-card">
+      <div class="label">▸ Out-of-Domain (CommonsenseQA, Acc %)</div>
+      <table>
+        <thead><tr><th>Method</th><th style="text-align:right">Qwen3-8B</th><th style="text-align:right">Qwen3-14B</th></tr></thead>
+        <tbody>
+          <tr><td class="method">GRPO</td><td class="num">63.9</td><td class="num">67.2</td></tr>
+          <tr><td class="method">S2L-PO · 1.7B explorer</td><td class="num">64.2</td><td class="num">—</td></tr>
+          <tr class="hi"><td class="method">S2L-PO · 4B explorer</td><td class="num">67.8 <span class="delta">+3.9</span></td><td class="num">70.7 <span class="delta">+3.5</span></td></tr>
+        </tbody>
+      </table>
+      <div style="margin-top: 18px; padding: 14px 16px; background: rgba(241,199,114,0.06); border: 1px dashed rgba(241,199,114,0.4); border-radius: 10px; font-size: 13px; color: var(--ink-soft);">
+        <b style="color: var(--accent-gold);">Generalization preserved.</b> Math-only RL with S2L-PO actually <i>improves</i> downstream commonsense — the exploration signal isn't overfitting to AIME-style problems.
+      </div>
+    </div>
+  </div>
+
+  <div class="fig-wrap" style="margin-top: 22px;">
+    <img src="assets/teaser.jpg" alt="Headline efficiency and performance" style="background: white;"/>
+    <div class="cap">Headline · <b>Left</b>: trajectory-level (policy-level) noise uses 25% less rollout compute and 10% less wall-clock vs. token-level. <b>Right</b>: it lifts AIME from 14 → 23 and CommonsenseQA from 67.4 → 68.</div>
+  </div>
+
+  <div class="curves-row">
+    <div class="fig-wrap">
+      <img src="assets/main_curves.jpg" alt="Pass@1 vs training data" style="background: white;"/>
+      <div class="cap">Pass@1 vs. training data — S2L-PO climbs faster and stabilizes at a strictly higher ceiling than vanilla GRPO.</div>
+    </div>
+    <div class="fig-wrap">
+      <img src="assets/passk.jpg" alt="Pass@k of Qwen3 sizes" style="background: white;"/>
+      <div class="cap">The motivating phenomenon — smaller Qwen3 base models catch up and surpass larger siblings as the sample budget k grows.</div>
+    </div>
+  </div>
+</section>
+
+<section class="body shell" id="cite">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">§ Cite</div>
+      <h2>BibTeX</h2>
+    </div>
+    <div class="blurb">
+      If you find this work useful, please cite us!
+    </div>
+  </div>
+
+  <div class="bib-block">
+<span class="k">@inproceedings</span>{<span class="v">s2lpo2026</span>,
+  <span class="k">title</span>     = {<span class="v">Smaller Models are Natural Explorers for Policy-Level Diversity in GRPO</span>},
+  <span class="k">author</span>    = {<span class="v">Yiming Ren and Yiran Xu and Zicheng Lin and Chufan Shi and Yukang Chen and Dingdong Wang and Tianhe Wu and Jujie Wang and Yujiu Yang and Yu Qiao and Ruihang Chu</span>},
+  <span class="k">booktitle</span> = {<span class="v">Proceedings of the 43rd International Conference on Machine Learning (ICML)</span>},
+  <span class="k">year</span>      = {<span class="v">2026</span>},
+}
+  </div>
+</section>
+
+<footer class="shell">
+  <div class="row">
+    <div>S2L-PO · Small-to-Large Policy Optimization · ICML 2026</div>
+    <div>Tsinghua University &amp; Shanghai AI Laboratory</div>
+  </div>
+</footer>
+
+</body>
+</html>
